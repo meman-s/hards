@@ -191,6 +191,35 @@ class Item(BaseModel):
 - **`@field_validator("field_name")`** (Pydantic v2) — валидатор для одного поля.
 - **`@model_validator(mode="after")`** — проверка всей модели (например, зависимость между полями).
 
+Пример: валидатор поля — нормализуем строку и проверяем длину; валидатор модели — проверяем, что дата начала раньше даты конца.
+
+```python
+from pydantic import BaseModel, field_validator, model_validator
+
+class Event(BaseModel):
+    title: str
+    start_date: str
+    end_date: str
+
+    @field_validator("title")
+    @classmethod
+    def title_stripped(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 2:
+            raise ValueError("title too short")
+        return v
+
+    @model_validator(mode="after")
+    def start_before_end(self) -> "Event":
+        if self.start_date > self.end_date:
+            raise ValueError("start_date must be before end_date")
+        return self
+```
+
+- `Event(title="  Meet  ", start_date="2025-01-10", end_date="2025-01-15")` — ок, `title` станет `"Meet"`.
+- `Event(title="x", ...)` — ValidationError из-за `title_stripped`.
+- `Event(title="OK", start_date="2025-01-20", end_date="2025-01-10")` — ValidationError из-за `start_before_end`.
+
 В Pydantic v1 использовались `@validator` и `@root_validator`.
 
 ### 4.5 Сериализация
