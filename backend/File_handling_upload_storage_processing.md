@@ -10,359 +10,214 @@
 - Валидацию типов и размеров
 - Безопасное хранение и доступ
 
-**Основные задачи:**
-- Приём файлов через HTTP (multipart/form-data)
-- Сохранение на диск или в облачное хранилище
-- Обработка (ресайз изображений, конвертация форматов)
-- Валидация (тип, размер, содержимое)
-- Безопасность (санитизация имён, проверка на вирусы)
-- Отдача файлов клиентам
+**Типичные задачи:**
+- Загрузка изображений, документов, видео
+- Обработка и преобразование файлов
+- Организация хранения
+- Контроль доступа к файлам
 
 ---
 
-## 2. Загрузка файлов
+## 2. Работа с файлами в Python
 
-**Процесс загрузки:**
-- Клиент отправляет файл через HTTP POST с `Content-Type: multipart/form-data`
-- Сервер получает поток данных (stream)
-- Сохранение в буфер или сразу на диск
-- Методы: `read()`, `read(chunk_size)`, `copyfileobj()`
+### 2.1 Базовые операции
 
-**Типы загрузки:**
-- Одиночный файл
-- Множественные файлы
-- Файл + метаданные (form-data)
+**Открытие файлов:**
+- `open(filename, mode)` — открытие файла
+- Режимы: `'r'` (чтение), `'w'` (запись), `'a'` (добавление), `'rb'` (бинарное чтение), `'wb'` (бинарная запись)
+- Контекстный менеджер `with` — автоматическое закрытие
 
-### 2.1 Базовая загрузка
+**Чтение файлов:**
+- `read()` — весь файл
+- `readline()` — одна строка
+- `readlines()` — все строки в список
+- `read(size)` — указанное количество байт
 
-**Основные операции:**
-- Получение файла из запроса
-- Чтение потока данных
-- Сохранение на диск через `open()` в режиме `wb` (write binary)
-- Использование `shutil.copyfileobj()` для эффективного копирования
+**Запись файлов:**
+- `write(data)` — запись данных
+- `writelines(lines)` — запись списка строк
 
 ```python
-from fastapi import FastAPI, UploadFile, File
+with open('file.txt', 'r') as f:
+    content = f.read()
+
+with open('file.txt', 'wb') as f:
+    f.write(binary_data)
+```
+
+### 2.2 Работа с бинарными данными
+
+**Байтовые объекты:**
+- `bytes` — неизменяемая последовательность байт
+- `bytearray` — изменяемая последовательность байт
+- `io.BytesIO` — поток в памяти для работы с байтами
+
+```python
+import io
+
+data = b'file content'
+buffer = io.BytesIO(data)
+content = buffer.read()
+```
+
+### 2.3 Копирование файлов
+
+**Методы копирования:**
+- `shutil.copyfileobj(src, dst)` — копирование объекта файла
+- `shutil.copy(src, dst)` — копирование файла
+- `shutil.copy2(src, dst)` — копирование с метаданными
+
+```python
 import shutil
 
-app = FastAPI()
-
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    with open(f"uploads/{file.filename}", "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    return {"filename": file.filename}
-```
-
-### 2.2 Множественная загрузка
-
-**Множественная загрузка:**
-- Клиент отправляет несколько файлов в одном запросе
-- Сервер обрабатывает список файлов
-- Каждый файл сохраняется отдельно
-- Возвращается список загруженных имён
-
-```python
-from fastapi import FastAPI, UploadFile, File
-from typing import List
-
-app = FastAPI()
-
-@app.post("/upload-multiple/")
-async def upload_files(files: List[UploadFile] = File(...)):
-    filenames = []
-    for file in files:
-        with open(f"uploads/{file.filename}", "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        filenames.append(file.filename)
-    return {"filenames": filenames}
-```
-
-### 2.3 Загрузка с метаданными
-
-**Метаданные:**
-- Дополнительная информация о файле (описание, категория)
-- Передаются через form-data вместе с файлом
-- Сохраняются в БД или вместе с файлом
-- Используются для организации и поиска файлов
-
-```python
-from fastapi import FastAPI, UploadFile, File, Form
-from pydantic import BaseModel
-
-app = FastAPI()
-
-@app.post("/upload-with-metadata/")
-async def upload_file(
-    file: UploadFile = File(...),
-    description: str = Form(...),
-    category: str = Form(...)
-):
-    file_path = f"uploads/{file.filename}"
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    return {
-        "filename": file.filename,
-        "description": description,
-        "category": category,
-        "size": file.size,
-        "content_type": file.content_type
-    }
-```
-
-### 2.4 Валидация типа файла
-
-**Валидация:**
-- Проверка расширения файла (`.jpg`, `.png`, `.pdf`)
-- Проверка размера файла (максимальный лимит)
-- Проверка MIME-типа (более надёжно)
-- Проверка по содержимому (magic bytes)
-
-```python
-from fastapi import FastAPI, UploadFile, File, HTTPException
-import os
-
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".pdf"}
-MAX_FILE_SIZE = 10 * 1024 * 1024
-
-def validate_file(file: UploadFile):
-    file_ext = os.path.splitext(file.filename)[1].lower()
-    if file_ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File type {file_ext} not allowed"
-        )
-    
-    if file.size > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail="File too large"
-        )
-
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    validate_file(file)
-    
-    with open(f"uploads/{file.filename}", "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    return {"filename": file.filename}
+with open('source.txt', 'rb') as src:
+    with open('dest.txt', 'wb') as dst:
+        shutil.copyfileobj(src, dst)
 ```
 
 ---
 
-## 3. Хранение файлов
+## 3. Валидация файлов
 
-**Стратегии хранения:**
-- **Локальное** — на диске сервера (просто, но не масштабируется)
-- **Облачное** — S3, MinIO, Azure Blob, Google Cloud Storage
-- **CDN** — для статических файлов (быстрая отдача)
+### 3.1 Проверка типа файла
 
-**Организация файлов:**
-- Уникальные имена (UUID) — избегает конфликтов
-- По датам (2024/01/) — удобно для бэкапов
-- По типам (images/, documents/) — логическая организация
-- Хеширование — распределение по подпапкам
+**Методы проверки:**
+- По расширению: `os.path.splitext(filename)[1]`
+- По MIME-типу: библиотека `python-magic` или `mimetypes`
+- По содержимому: проверка сигнатур файлов (magic bytes)
 
-### 3.1 Локальное хранение
-
-**Особенности:**
-- Простота реализации
-- Быстрый доступ
-- Проблемы: масштабирование, бэкапы, отказоустойчивость
-- Генерация уникальных имён через UUID
-- Использование `pathlib.Path` для работы с путями
+**Библиотеки:**
+- `python-magic` — определение типа по содержимому
+- `mimetypes` — стандартная библиотека для MIME-типов
 
 ```python
-from fastapi import FastAPI, UploadFile, File
+import os
+import magic
+
+def get_file_type(filename: str, content: bytes) -> str:
+    ext = os.path.splitext(filename)[1].lower()
+    mime = magic.from_buffer(content, mime=True)
+    return mime
+```
+
+### 3.2 Проверка размера
+
+**Методы:**
+- `os.path.getsize(path)` — размер файла
+- Проверка размера перед загрузкой
+- Ограничение максимального размера
+
+```python
+import os
+
+MAX_SIZE = 10 * 1024 * 1024  # 10 MB
+
+file_size = os.path.getsize('file.txt')
+if file_size > MAX_SIZE:
+    raise ValueError("File too large")
+```
+
+### 3.3 Проверка содержимого
+
+**Методы:**
+- Проверка хеша файла (SHA256, MD5)
+- Сравнение с базой известных вредоносных файлов
+- Валидация структуры файла
+
+```python
+import hashlib
+
+def get_file_hash(file_data: bytes) -> str:
+    return hashlib.sha256(file_data).hexdigest()
+```
+
+---
+
+## 4. Хранение файлов
+
+### 4.1 Локальное хранение
+
+**Организация:**
+- Создание уникальных имён файлов (UUID)
+- Организация по датам/категориям
+- Использование `pathlib.Path` для работы с путями
+
+**Структура:**
+```
+uploads/
+  2024/
+    01/
+    02/
+```
+
+**Методы:**
+- `Path.mkdir(parents=True, exist_ok=True)` — создание директорий
+- `uuid.uuid4()` — генерация уникального имени
+- `os.path.join()` или `Path / filename` — формирование пути
+
+```python
 from pathlib import Path
 import uuid
 import os
 
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
-
-app = FastAPI()
-
-def generate_unique_filename(original_filename: str) -> str:
-    ext = os.path.splitext(original_filename)[1]
-    return f"{uuid.uuid4()}{ext}"
-
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    unique_filename = generate_unique_filename(file.filename)
-    file_path = UPLOAD_DIR / unique_filename
+def save_file(content: bytes, original_name: str) -> str:
+    ext = os.path.splitext(original_name)[1]
+    unique_name = f"{uuid.uuid4()}{ext}"
+    path = Path("uploads") / unique_name
+    path.parent.mkdir(parents=True, exist_ok=True)
     
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    with open(path, 'wb') as f:
+        f.write(content)
     
-    return {
-        "filename": unique_filename,
-        "original_filename": file.filename,
-        "path": str(file_path)
-    }
+    return str(path)
 ```
 
-### 3.2 Организация по датам
+### 4.2 Облачное хранение
 
-**Организация по датам:**
-- Структура: `YYYY/MM/` или `YYYY/MM/DD/`
-- Преимущества: удобные бэкапы, очистка старых файлов
-- Автоматическое создание директорий через `mkdir(parents=True)`
+**Варианты:**
+- **AWS S3** — через `boto3`
+- **MinIO** — S3-совместимое хранилище
+- **Google Cloud Storage** — через `google-cloud-storage`
+- **Azure Blob Storage** — через `azure-storage-blob`
 
-```python
-from datetime import datetime
-from pathlib import Path
+**Преимущества:**
+- Масштабируемость
+- Резервное копирование
+- CDN интеграция
+- Управление доступом
 
-def get_upload_path(filename: str) -> Path:
-    today = datetime.now()
-    year_month = today.strftime("%Y/%m")
-    upload_path = UPLOAD_DIR / year_month
-    upload_path.mkdir(parents=True, exist_ok=True)
-    return upload_path / filename
-
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    unique_filename = generate_unique_filename(file.filename)
-    file_path = get_upload_path(unique_filename)
-    
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    return {"path": str(file_path)}
-```
-
-### 3.3 Хранение в S3 (boto3)
-
-**Amazon S3:**
-- Объектное хранилище (Object Storage)
-- Методы: `upload_fileobj()`, `download_fileobj()`, `generate_presigned_url()`
-- Presigned URLs — временные ссылки для доступа
-- Масштабируемость, репликация, версионирование
+**Основные операции:**
+- `upload_fileobj()` — загрузка файла
+- `download_fileobj()` — скачивание файла
+- `generate_presigned_url()` — временная ссылка
+- `delete_object()` — удаление файла
 
 ```python
 import boto3
-from fastapi import FastAPI, UploadFile, File
 
-s3_client = boto3.client('s3')
-BUCKET_NAME = "my-bucket"
+s3 = boto3.client('s3')
 
-app = FastAPI()
-
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    unique_filename = f"{uuid.uuid4()}_{file.filename}"
-    
-    s3_client.upload_fileobj(
-        file.file,
-        BUCKET_NAME,
-        unique_filename,
-        ExtraArgs={"ContentType": file.content_type}
-    )
-    
-    url = s3_client.generate_presigned_url(
-        'get_object',
-        Params={'Bucket': BUCKET_NAME, 'Key': unique_filename},
-        ExpiresIn=3600
-    )
-    
-    return {"filename": unique_filename, "url": url}
-```
-
-### 3.4 Хранение в облаке (MinIO)
-
-**MinIO:**
-- S3-совместимое хранилище (можно использовать локально)
-- API совместим с S3
-- Методы: `put_object()`, `get_object()`, `remove_object()`
-- Подходит для разработки и продакшена
-
-```python
-from minio import Minio
-from fastapi import FastAPI, UploadFile, File
-
-minio_client = Minio(
-    "localhost:9000",
-    access_key="minioadmin",
-    secret_key="minioadmin",
-    secure=False
-)
-BUCKET_NAME = "uploads"
-
-app = FastAPI()
-
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    unique_filename = f"{uuid.uuid4()}_{file.filename}"
-    
-    minio_client.put_object(
-        BUCKET_NAME,
-        unique_filename,
-        file.file,
-        length=file.size,
-        content_type=file.content_type
-    )
-    
-    return {"filename": unique_filename}
+with open('file.txt', 'rb') as f:
+    s3.upload_fileobj(f, 'bucket-name', 'key-name')
 ```
 
 ---
 
-## 4. Обработка файлов
+## 5. Обработка файлов
 
-**Типы обработки:**
-- **Изображения:** ресайз, обрезка, конвертация форматов, сжатие
-- **PDF:** извлечение текста, объединение, разделение
-- **Видео:** конвертация, обрезка, сжатие
-- **Документы:** парсинг, конвертация (DOCX → PDF)
+### 5.1 Обработка изображений (Pillow)
 
-**Библиотеки:**
-- **Pillow (PIL)** — работа с изображениями
-- **PyPDF2/pdfplumber** — работа с PDF
-- **moviepy/ffmpeg** — обработка видео
-- **python-magic** — определение типа файла
+**Библиотека:** `PIL` (Pillow)
 
-### 4.1 Обработка изображений (Pillow)
-
-**Операции:**
-- `Image.open()` — открытие из bytes или файла
-- `thumbnail()` — создание миниатюры с сохранением пропорций
+**Основные операции:**
+- `Image.open()` — открытие изображения
 - `resize()` — изменение размера
-- `save()` — сохранение в нужном формате
-- Работа через `BytesIO` для обработки в памяти
+- `thumbnail()` — создание миниатюры
+- `convert()` — конвертация формата
+- `save()` — сохранение
 
-```python
-from PIL import Image
-from fastapi import FastAPI, UploadFile, File
-import io
-
-app = FastAPI()
-
-@app.post("/upload-image/")
-async def upload_image(file: UploadFile = File(...)):
-    contents = await file.read()
-    image = Image.open(io.BytesIO(contents))
-    
-    image.thumbnail((800, 800))
-    
-    output = io.BytesIO()
-    image.save(output, format="JPEG", quality=85)
-    output.seek(0)
-    
-    with open(f"uploads/thumb_{file.filename}", "wb") as f:
-        f.write(output.getvalue())
-    
-    return {"message": "Image processed"}
-```
-
-### 4.2 Изменение размера изображения
-
-**Ресайз изображений:**
-- Методы: `resize()`, `thumbnail()`
-- Алгоритмы: LANCZOS, BICUBIC, NEAREST
-- Сохранение пропорций или принудительный размер
-- Качество сжатия (quality для JPEG)
+**Форматы:**
+- JPEG, PNG, GIF, BMP, TIFF, WebP
 
 ```python
 from PIL import Image
@@ -373,236 +228,69 @@ def resize_image(image_data: bytes, width: int, height: int) -> bytes:
     image = image.resize((width, height), Image.Resampling.LANCZOS)
     
     output = io.BytesIO()
-    image.save(output, format="JPEG")
+    image.save(output, format='JPEG')
     return output.getvalue()
-
-@app.post("/resize-image/")
-async def resize_image_endpoint(
-    file: UploadFile = File(...),
-    width: int = 800,
-    height: int = 600
-):
-    contents = await file.read()
-    resized = resize_image(contents, width, height)
-    
-    output_filename = f"resized_{file.filename}"
-    with open(f"uploads/{output_filename}", "wb") as f:
-        f.write(resized)
-    
-    return {"filename": output_filename}
 ```
 
-### 4.3 Конвертация форматов
+### 5.2 Обработка PDF
 
-**Конвертация:**
-- JPEG ↔ PNG ↔ GIF ↔ WebP
-- Учёт цветовых режимов (RGB, RGBA)
-- RGBA → RGB при конвертации в JPEG (удаление альфа-канала)
-- Сохранение через `save(format=...)`
+**Библиотеки:**
+- `PyPDF2` / `pypdf` — чтение и запись PDF
+- `pdfplumber` — извлечение текста и таблиц
+- `reportlab` — создание PDF
 
-```python
-from PIL import Image
-import io
-
-def convert_image(image_data: bytes, output_format: str) -> bytes:
-    image = Image.open(io.BytesIO(image_data))
-    
-    if image.mode == "RGBA" and output_format.upper() == "JPEG":
-        image = image.convert("RGB")
-    
-    output = io.BytesIO()
-    image.save(output, format=output_format)
-    return output.getvalue()
-
-@app.post("/convert-image/")
-async def convert_image_endpoint(
-    file: UploadFile = File(...),
-    format: str = "PNG"
-):
-    contents = await file.read()
-    converted = convert_image(contents, format)
-    
-    output_filename = f"converted_{file.filename}.{format.lower()}"
-    with open(f"uploads/{output_filename}", "wb") as f:
-        f.write(converted)
-    
-    return {"filename": output_filename}
-```
-
-### 4.4 Обработка PDF
-
-**Операции с PDF:**
-- Чтение: `PdfReader()` — извлечение страниц, текста
-- Запись: `PdfWriter()` — создание, объединение PDF
-- Методы: `add_page()`, `write()`, `get_page()`
-- Извлечение метаданных, количества страниц
+**Операции:**
+- Чтение страниц
+- Объединение PDF
+- Извлечение текста
+- Добавление страниц
 
 ```python
 from PyPDF2 import PdfReader, PdfWriter
-from fastapi import FastAPI, UploadFile, File
 
-app = FastAPI()
+reader = PdfReader('input.pdf')
+writer = PdfWriter()
 
-@app.post("/process-pdf/")
-async def process_pdf(file: UploadFile = File(...)):
-    reader = PdfReader(file.file)
-    writer = PdfWriter()
-    
-    for page in reader.pages:
-        writer.add_page(page)
-    
-    output_filename = f"processed_{file.filename}"
-    with open(f"uploads/{output_filename}", "wb") as output_file:
-        writer.write(output_file)
-    
-    return {
-        "filename": output_filename,
-        "pages": len(reader.pages)
-    }
+for page in reader.pages:
+    writer.add_page(page)
+
+with open('output.pdf', 'wb') as f:
+    writer.write(f)
 ```
 
-### 4.5 Обработка в фоне
+### 5.3 Обработка других форматов
 
-**Асинхронная обработка:**
-- Тяжёлые операции выполняются в фоне
-- Клиент получает ответ сразу после загрузки
-- Обработка через фоновые задачи или очереди (Celery, RQ)
-- Улучшает UX для больших файлов
+**CSV:**
+- `csv.reader()` / `csv.writer()` — стандартная библиотека
+- `pandas.read_csv()` — для анализа данных
 
-```python
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks
-from PIL import Image
-import io
+**JSON:**
+- `json.load()` / `json.dump()` — стандартная библиотека
 
-app = FastAPI()
+**Excel:**
+- `openpyxl` — для .xlsx
+- `xlrd` — для .xls
 
-def process_image_async(file_path: str, filename: str):
-    with open(file_path, "rb") as f:
-        image = Image.open(f)
-        image.thumbnail((800, 800))
-        
-        output_path = f"uploads/thumb_{filename}"
-        image.save(output_path, format="JPEG")
-
-@app.post("/upload-image/")
-async def upload_image(
-    file: UploadFile = File(...),
-    background_tasks: BackgroundTasks
-):
-    file_path = f"uploads/{file.filename}"
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    background_tasks.add_task(process_image_async, file_path, file.filename)
-    
-    return {"message": "Image uploaded, processing in background"}
-```
-
----
-
-## 5. Валидация файлов
-
-**Методы валидации:**
-- **По расширению** — быстро, но ненадёжно (можно подделать)
-- **По MIME-типу** — из заголовка Content-Type (тоже можно подделать)
-- **По содержимому** — magic bytes (первые байты файла) — самый надёжный
-- **По размеру** — проверка лимитов
-
-**Библиотеки:**
-- `python-magic` — определение типа по содержимому
-- `filetype` — определение типа файла
-- Проверка magic bytes вручную
-
-### 5.1 Проверка типа по содержимому
-
-**Magic bytes:**
-- Первые байты файла определяют его тип
-- JPEG: `FF D8 FF`
-- PNG: `89 50 4E 47`
-- PDF: `25 50 44 46`
-- `magic.from_buffer()` — определение MIME-типа
-
-```python
-import magic
-from fastapi import FastAPI, UploadFile, File, HTTPException
-
-app = FastAPI()
-
-ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "application/pdf"]
-
-def validate_file_type(file: UploadFile):
-    contents = file.file.read()
-    file.file.seek(0)
-    
-    mime_type = magic.from_buffer(contents, mime=True)
-    if mime_type not in ALLOWED_MIME_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File type {mime_type} not allowed"
-        )
-
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    validate_file_type(file)
-    
-    with open(f"uploads/{file.filename}", "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    return {"filename": file.filename}
-```
-
-### 5.2 Проверка размера
-
-**Проверка размера:**
-- Лимиты: максимальный размер файла
-- Проверка до сохранения (экономия ресурсов)
-- Разные лимиты для разных типов файлов
-- `file.size` или `len(contents)` для проверки
-
-```python
-from fastapi import FastAPI, UploadFile, File, HTTPException
-
-MAX_FILE_SIZE = 10 * 1024 * 1024
-
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    if file.size > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File too large. Maximum size: {MAX_FILE_SIZE} bytes"
-        )
-    
-    with open(f"uploads/{file.filename}", "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    return {"filename": file.filename}
-```
+**Архивы:**
+- `zipfile` — работа с ZIP
+- `tarfile` — работа с TAR
 
 ---
 
 ## 6. Безопасность
 
-**Угрозы:**
-- Path traversal (`../../../etc/passwd`) — доступ к системным файлам
-- Перезапись существующих файлов
-- Вредоносные файлы (вирусы, эксплойты)
-- DoS через большие файлы
+### 6.1 Санитизация имён файлов
 
-**Меры защиты:**
-- Санитизация имён файлов
-- Генерация уникальных имён
-- Проверка на известные вредоносные хеши
-- Ограничение размера и типов
-- Изоляция загруженных файлов
+**Проблемы:**
+- Путь-траверсал (`../../../etc/passwd`)
+- Специальные символы
+- Длинные имена
 
-### 6.1 Санитизация имени файла
-
-**Санитизация:**
-- Удаление опасных символов (`../`, `\`, `/`)
-- Оставление только безопасных символов (буквы, цифры, дефис, подчёркивание)
-- Нормализация (замена пробелов на дефисы)
-- Удаление ведущих/конечных символов
-- Использование regex для очистки
+**Методы:**
+- Удаление опасных символов
+- Ограничение длины
+- Использование UUID для имён
+- Проверка пути на выход за пределы директории
 
 ```python
 import re
@@ -613,202 +301,130 @@ def sanitize_filename(filename: str) -> str:
     filename = re.sub(r'[-\s]+', '-', filename)
     return filename.strip('-_')
 
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    safe_filename = sanitize_filename(file.filename)
-    file_path = UPLOAD_DIR / safe_filename
-    
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    return {"filename": safe_filename}
+def safe_path(base_dir: Path, filename: str) -> Path:
+    safe_name = sanitize_filename(filename)
+    full_path = base_dir / safe_name
+    if not full_path.resolve().is_relative_to(base_dir.resolve()):
+        raise ValueError("Path traversal detected")
+    return full_path
 ```
 
-### 6.2 Проверка на вредоносные файлы
+### 6.2 Защита от вредоносных файлов
 
-**Проверка на вредоносность:**
-- Хеширование файла (SHA256, MD5)
-- Сравнение с базой известных вредоносных хешей
-- Сканирование антивирусом (ClamAV)
-- Анализ содержимого (для исполняемых файлов)
-- Sandbox для подозрительных файлов
+**Методы:**
+- Проверка хеша файла
+- Сканирование антивирусом
+- Ограничение типов файлов
+- Проверка сигнатур (magic bytes)
+- Изоляция обработки файлов
 
-```python
-import hashlib
-from fastapi import FastAPI, UploadFile, File
-
-KNOWN_MALICIOUS_HASHES = set()
-
-def check_file_hash(file_data: bytes) -> bool:
-    file_hash = hashlib.sha256(file_data).hexdigest()
-    return file_hash not in KNOWN_MALICIOUS_HASHES
-
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    contents = await file.read()
-    
-    if not check_file_hash(contents):
-        raise HTTPException(status_code=400, detail="File blocked")
-    
-    with open(f"uploads/{file.filename}", "wb") as buffer:
-        buffer.write(contents)
-    
-    return {"filename": file.filename}
-```
+**Практики:**
+- Хранение файлов вне web root
+- Ограничение прав доступа
+- Валидация перед обработкой
+- Логирование подозрительных файлов
 
 ---
 
-## 7. Отдача файлов
+## 7. Оптимизация
 
-**Способы отдачи:**
-- **Статические файлы** — прямая отдача через веб-сервер
-- **Через приложение** — контроль доступа, логирование
-- **Стриминг** — для больших файлов (по частям)
-- **Presigned URLs** — временные ссылки из облачного хранилища
+### 7.1 Потоковая обработка
 
-**HTTP заголовки:**
-- `Content-Type` — MIME-тип файла
-- `Content-Disposition` — inline (просмотр) или attachment (скачивание)
-- `Content-Length` — размер файла
-- `Cache-Control` — кэширование
-
-### 7.1 Отдача статических файлов
-
-**Статическая отдача:**
-- Прямая отдача файла через `FileResponse`
-- Проверка существования файла
-- Установка правильного Content-Type
-- Быстрая отдача без обработки
+**Для больших файлов:**
+- Чтение по частям (chunks)
+- Потоковая запись
+- Использование генераторов
 
 ```python
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
-from pathlib import Path
-
-app = FastAPI()
-
-@app.get("/files/{filename}")
-async def get_file(filename: str):
-    file_path = Path("uploads") / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path)
+def read_file_in_chunks(file_path: str, chunk_size: int = 8192):
+    with open(file_path, 'rb') as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
 ```
 
-### 7.2 Скачивание файлов
+### 7.2 Асинхронная обработка
 
-**Скачивание:**
-- `StreamingResponse` — потоковая отдача больших файлов
-- `Content-Disposition: attachment` — принудительное скачивание
-- Генератор для чтения файла по частям (экономия памяти)
-- Поддержка Range-запросов для докачки
+**Методы:**
+- Фоновые задачи (background tasks)
+- Очереди задач (Celery, RQ)
+- Асинхронная загрузка в облако
 
-```python
-from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
-from pathlib import Path
+**Преимущества:**
+- Не блокирует основной поток
+- Параллельная обработка
+- Масштабируемость
 
-app = FastAPI()
+### 7.3 Кэширование
 
-@app.get("/download/{filename}")
-async def download_file(filename: str):
-    file_path = Path("uploads") / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    def iterfile():
-        with open(file_path, "rb") as f:
-            yield from f
-    
-    return StreamingResponse(
-        iterfile(),
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
-```
+**Методы:**
+- Кэширование обработанных файлов
+- CDN для статических файлов
+- Кэширование метаданных
 
 ---
 
 ## 8. Best Practices
 
+### 8.1 Организация структуры
+
 **Рекомендации:**
-- Организованная структура директорий
+- Разделение на директории (uploads, processed, temp)
+- Организация по датам/категориям
 - Очистка временных файлов
-- Логирование операций
-- Обработка ошибок
-- Мониторинг использования диска
+- Резервное копирование
 
-### 8.1 Структура проекта
+### 8.2 Обработка ошибок
 
-**Организация:**
-- `uploads/` — загруженные файлы
-- `processed/` — обработанные файлы
-- `temp/` — временные файлы
-- Организация по датам/типам
-- Отдельные директории для разных типов контента
+**Важно:**
+- Обработка исключений при работе с файлами
+- Проверка существования файлов
+- Валидация перед обработкой
+- Логирование ошибок
 
-```
-project/
-  uploads/
-    2024/
-      01/
-      02/
-  processed/
-  temp/
-```
+### 8.3 Производительность
 
-### 8.2 Очистка временных файлов
+**Оптимизация:**
+- Потоковая обработка больших файлов
+- Асинхронная загрузка
+- Кэширование результатов
+- Использование облачного хранилища для масштабирования
 
-**Очистка:**
-- Удаление старых временных файлов по расписанию
-- Проверка времени модификации (`st_mtime`)
-- Cron-задачи или фоновые процессы
-- Очистка после обработки
+### 8.4 Безопасность
 
-```python
-from fastapi import FastAPI, BackgroundTasks
-from datetime import datetime, timedelta
-import os
+**Правила:**
+- Всегда валидировать файлы
+- Санитизировать имена
+- Ограничивать типы и размеры
+- Хранить файлы вне web root
+- Использовать уникальные имена
+- Логировать операции
 
-def cleanup_temp_files():
-    cutoff = datetime.now() - timedelta(hours=24)
-    temp_dir = Path("temp")
-    
-    for file_path in temp_dir.iterdir():
-        if file_path.stat().st_mtime < cutoff.timestamp():
-            file_path.unlink()
+---
 
-@app.post("/upload/")
-async def upload_file(
-    file: UploadFile = File(...),
-    background_tasks: BackgroundTasks
-):
-    background_tasks.add_task(cleanup_temp_files)
-    # ... загрузка файла
-```
+## 9. Полезные библиотеки
 
-### 8.3 Логирование загрузок
+**Работа с файлами:**
+- `pathlib` — современная работа с путями
+- `shutil` — операции с файлами
+- `tempfile` — временные файлы
 
-**Логирование:**
-- Запись всех операций с файлами
-- Информация: имя, размер, тип, пользователь, время
-- Отслеживание ошибок
-- Аудит для безопасности
-- Метрики использования хранилища
+**Обработка изображений:**
+- `Pillow` (PIL) — обработка изображений
+- `opencv-python` — компьютерное зрение
 
-```python
-import logging
-from fastapi import FastAPI, UploadFile, File
+**Обработка документов:**
+- `PyPDF2` / `pypdf` — PDF
+- `python-docx` — Word документы
+- `openpyxl` — Excel файлы
 
-logger = logging.getLogger(__name__)
+**Облачное хранилище:**
+- `boto3` — AWS S3
+- `minio` — MinIO
+- `google-cloud-storage` — Google Cloud
 
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...)):
-    logger.info(f"Uploading file: {file.filename}, size: {file.size}")
-    
-    with open(f"uploads/{file.filename}", "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
-    logger.info(f"File uploaded successfully: {file.filename}")
-    return {"filename": file.filename}
-```
+**Валидация:**
+- `python-magic` — определение типа файла
+- `filetype` — определение типа по содержимому
