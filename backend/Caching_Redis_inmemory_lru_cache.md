@@ -2,7 +2,15 @@
 
 ## 1. Зачем нужно
 
-Кеширование необходимо для:
+**Кеширование** — техника хранения часто используемых данных в быстродоступном хранилище для ускорения доступа.
+
+**Проблемы без кеширования:**
+- Медленный доступ к данным (БД, внешние API)
+- Высокая нагрузка на БД
+- Медленная работа приложения
+- Дорогие вычисления выполняются повторно
+
+**Кеширование необходимо для:**
 
 - Ускорения доступа к данным
 - Снижения нагрузки на БД
@@ -10,30 +18,60 @@
 - Хранения сессий и временных данных
 - Распределённого кеширования в микросервисах
 
+**Типы данных для кеширования:**
+- Результаты запросов к БД
+- Результаты вычислений
+- Сессии пользователей
+- Статические данные
+- Ответы внешних API
+
 ---
 
 ## 2. In-memory кэширование
 
+**In-memory кеш** — хранение данных в оперативной памяти процесса.
+
+**Преимущества:**
+- Очень быстрый доступ
+- Простота использования
+- Не требует внешних зависимостей
+
+**Недостатки:**
+- Ограничен размером памяти
+- Данные теряются при перезапуске
+- Не разделяется между процессами/серверами
+
 ### 2.1 @lru_cache (functools)
+
+**LRU (Least Recently Used)** — алгоритм вытеснения наименее используемых элементов.
+
+**Особенности:**
+- Автоматическое управление размером
+- Вытеснение старых записей
+- Кеширование результатов функций
 
 ```python
 from functools import lru_cache
-from fastapi import FastAPI
-
-app = FastAPI()
 
 @lru_cache(maxsize=128)
 def expensive_function(n: int) -> int:
-    print(f"Computing for {n}")
     return n * n
 
-@app.get("/compute/{n}")
-def compute(n: int):
-    result = expensive_function(n)
-    return {"result": result}
+result = expensive_function(5)  # Вычисляется
+result = expensive_function(5)  # Берётся из кеша
 ```
 
+**Параметры:**
+- `maxsize` — максимальное количество элементов
+- `typed` — раздельное кеширование для разных типов
+
 ### 2.2 @cache (Python 3.9+)
+
+**@cache** — неограниченный кеш (без maxsize).
+
+**Использование:**
+- Для функций с небольшим количеством уникальных аргументов
+- Рекурсивные функции (например, Fibonacci)
 
 ```python
 from functools import cache
@@ -47,10 +85,15 @@ def fibonacci(n: int) -> int:
 
 ### 2.3 Кэширование с TTL
 
+**TTL (Time To Live)** — время жизни записи в кеше.
+
+**Зачем нужно:**
+- Автоматическая инвалидация устаревших данных
+- Контроль актуальности данных
+- Освобождение памяти
+
 ```python
-from functools import lru_cache
 from datetime import datetime, timedelta
-from typing import Optional
 
 cache_data = {}
 cache_timestamps = {}
@@ -64,6 +107,8 @@ def cached_with_ttl(ttl_seconds: int = 300):
                 timestamp = cache_timestamps[cache_key]
                 if datetime.now() - timestamp < timedelta(seconds=ttl_seconds):
                     return cache_data[cache_key]
+                else:
+                    del cache_data[cache_key]
             
             result = func(*args, **kwargs)
             cache_data[cache_key] = result
@@ -72,19 +117,20 @@ def cached_with_ttl(ttl_seconds: int = 300):
         
         return wrapper
     return decorator
-
-@cached_with_ttl(ttl_seconds=60)
-def get_user_data(user_id: int):
-    return {"id": user_id, "name": "John"}
 ```
 
 ### 2.4 cachetools
 
+**Библиотека `cachetools`** — продвинутые алгоритмы кеширования.
+
+**Типы кешей:**
+- `TTLCache` — кеш с TTL
+- `LRUCache` — LRU алгоритм
+- `LFUCache` — Least Frequently Used
+- `RRCache` — Random Replacement
+
 ```python
 from cachetools import TTLCache, LRUCache
-from fastapi import FastAPI
-
-app = FastAPI()
 
 ttl_cache = TTLCache(maxsize=100, ttl=300)
 lru_cache = LRUCache(maxsize=128)
@@ -96,40 +142,65 @@ def get_cached_data(key: str):
     data = fetch_from_db(key)
     ttl_cache[key] = data
     return data
-
-@app.get("/data/{key}")
-def get_data(key: str):
-    return get_cached_data(key)
 ```
+
+**Алгоритмы вытеснения:**
+- **LRU** — вытесняет наименее недавно использованные
+- **LFU** — вытесняет наименее часто используемые
+- **RR** — случайное вытеснение
 
 ---
 
 ## 3. Redis кеширование
 
+**Redis** — in-memory хранилище данных (key-value store).
+
+**Преимущества:**
+- Распределённое кеширование
+- Персистентность (опционально)
+- Богатый набор структур данных
+- Высокая производительность
+- Поддержка кластеризации
+
+**Использование:**
+- Кеширование между серверами
+- Сессии пользователей
+- Очереди задач
+- Pub/Sub
+
 ### 3.1 Подключение к Redis
+
+**Библиотека:** `redis` (python-redis)
 
 ```python
 import redis
-from fastapi import FastAPI
 
 redis_client = redis.Redis(
     host='localhost',
     port=6379,
     db=0,
-    decode_responses=True
+    decode_responses=True  # Автоматическая декодировка строк
 )
-
-app = FastAPI()
 ```
 
-### 3.2 Базовое кеширование
+**Параметры подключения:**
+- `host`, `port` — адрес сервера
+- `db` — номер базы данных (0-15)
+- `password` — пароль (если требуется)
+- `decode_responses` — автоматическое декодирование
+
+### 3.2 Базовые операции
+
+**Основные команды:**
+- `set(key, value)` — установка значения
+- `get(key)` — получение значения
+- `setex(key, ttl, value)` — установка с TTL
+- `delete(key)` — удаление
+- `exists(key)` — проверка существования
+- `expire(key, ttl)` — установка TTL
 
 ```python
 import json
-from fastapi import FastAPI
-import redis
-
-redis_client = redis.Redis(host='localhost', port=6379, db=0)
 
 def get_cached_user(user_id: int):
     cache_key = f"user:{user_id}"
@@ -141,51 +212,57 @@ def get_cached_user(user_id: int):
     user_data = fetch_user_from_db(user_id)
     redis_client.setex(
         cache_key,
-        300,
+        300,  # TTL в секундах
         json.dumps(user_data)
     )
     return user_data
-
-@app.get("/users/{user_id}")
-def get_user(user_id: int):
-    return get_cached_user(user_id)
 ```
 
-### 3.3 Кеширование с сериализацией
+### 3.3 Сериализация данных
 
-```python
-import pickle
-import redis
+**Форматы:**
+- **JSON** — для простых структур (dict, list)
+- **Pickle** — для сложных объектов Python
+- **MessagePack** — компактный бинарный формат
 
-redis_client = redis.Redis(host='localhost', port=6379, db=0)
-
-def cache_set(key: str, value: any, ttl: int = 300):
-    serialized = pickle.dumps(value)
-    redis_client.setex(key, ttl, serialized)
-
-def cache_get(key: str):
-    cached = redis_client.get(key)
-    if cached:
-        return pickle.loads(cached)
-    return None
-```
-
-### 3.4 Кеширование списков
-
+**JSON (рекомендуется):**
 ```python
 import json
-import redis
 
-redis_client = redis.Redis(host='localhost', port=6379, db=0)
+redis_client.setex(key, ttl, json.dumps(data))
+data = json.loads(redis_client.get(key))
+```
 
-def cache_list(key: str, items: list, ttl: int = 300):
-    redis_client.setex(key, ttl, json.dumps(items))
+**Pickle:**
+```python
+import pickle
 
-def get_cached_list(key: str):
-    cached = redis_client.get(key)
-    if cached:
-        return json.loads(cached)
-    return None
+redis_client.setex(key, ttl, pickle.dumps(obj))
+obj = pickle.loads(redis_client.get(key))
+```
+
+### 3.4 Структуры данных Redis
+
+**Типы данных:**
+- **String** — строки и числа
+- **List** — списки
+- **Set** — множества
+- **Hash** — словари
+- **Sorted Set** — отсортированные множества
+
+**Примеры:**
+```python
+# Список
+redis_client.lpush('queue', 'item1')
+redis_client.rpop('queue')
+
+# Множество
+redis_client.sadd('tags', 'python', 'redis')
+redis_client.smembers('tags')
+
+# Hash
+redis_client.hset('user:1', 'name', 'John')
+redis_client.hgetall('user:1')
 ```
 
 ---
@@ -193,6 +270,23 @@ def get_cached_list(key: str):
 ## 4. Паттерны кеширования
 
 ### 4.1 Cache-Aside (Lazy Loading)
+
+**Принцип:** Приложение само управляет кешем.
+
+**Алгоритм:**
+1. Проверить кеш
+2. Если нет — загрузить из БД
+3. Сохранить в кеш
+4. Вернуть данные
+
+**Преимущества:**
+- Простота реализации
+- Гибкость
+- Кеш не блокирует БД при сбое
+
+**Недостатки:**
+- Cache miss требует двух операций
+- Возможна race condition
 
 ```python
 def get_user(user_id: int):
@@ -209,6 +303,21 @@ def get_user(user_id: int):
 
 ### 4.2 Write-Through
 
+**Принцип:** Запись идёт одновременно в кеш и БД.
+
+**Алгоритм:**
+1. Записать в БД
+2. Записать в кеш
+3. Вернуть результат
+
+**Преимущества:**
+- Консистентность данных
+- Всегда актуальные данные в кеше
+
+**Недостатки:**
+- Медленнее (две записи)
+- Лишние записи в кеш при редком чтении
+
 ```python
 def create_user(user_data: dict):
     user = save_user_to_db(user_data)
@@ -221,6 +330,23 @@ def create_user(user_data: dict):
 
 ### 4.3 Write-Back (Write-Behind)
 
+**Принцип:** Сначала запись в кеш, затем асинхронно в БД.
+
+**Алгоритм:**
+1. Записать в кеш
+2. Добавить в очередь на запись в БД
+3. Асинхронно записать в БД
+
+**Преимущества:**
+- Быстрая запись
+- Снижение нагрузки на БД
+- Batch записи
+
+**Недостатки:**
+- Риск потери данных при сбое
+- Сложность реализации
+- Возможна несогласованность
+
 ```python
 write_queue = []
 
@@ -231,7 +357,6 @@ def update_user(user_id: int, user_data: dict):
     redis_client.setex(cache_key, 300, json.dumps(updated_user))
     
     write_queue.append((user_id, user_data))
-    
     return updated_user
 
 def flush_cache():
@@ -240,29 +365,31 @@ def flush_cache():
         save_user_to_db(user_id, user_data)
 ```
 
-### 4.4 Cache-Aside с обновлением
+### 4.4 Refresh-Ahead
 
-```python
-def update_user(user_id: int, user_data: dict):
-    user = update_user_in_db(user_id, user_data)
-    
-    cache_key = f"user:{user_id}"
-    redis_client.setex(cache_key, 300, json.dumps(user))
-    
-    return user
+**Принцип:** Предзагрузка данных до истечения TTL.
 
-def delete_user(user_id: int):
-    delete_user_from_db(user_id)
-    
-    cache_key = f"user:{user_id}"
-    redis_client.delete(cache_key)
-```
+**Алгоритм:**
+1. Проверить время до истечения TTL
+2. Если близко — обновить в фоне
+3. Вернуть текущие данные
+
+**Преимущества:**
+- Всегда актуальные данные
+- Нет задержек на обновление
 
 ---
 
 ## 5. Инвалидация кеша
 
+**Инвалидация** — удаление устаревших данных из кеша.
+
 ### 5.1 Простая инвалидация
+
+**Методы:**
+- Удаление по ключу
+- Удаление при обновлении данных
+- Ручная инвалидация
 
 ```python
 def invalidate_user_cache(user_id: int):
@@ -277,30 +404,67 @@ def update_user(user_id: int, user_data: dict):
 
 ### 5.2 Инвалидация по паттерну
 
+**Использование:**
+- Удаление группы связанных ключей
+- Инвалидация по префиксу
+- Очистка категорий данных
+
 ```python
 def invalidate_cache_pattern(pattern: str):
-    keys = redis_client.keys(pattern)
+    keys = redis_client.keys(pattern)  # Медленно на больших БД!
     if keys:
         redis_client.delete(*keys)
 
-def update_user(user_id: int, user_data: dict):
-    user = update_user_in_db(user_id, user_data)
-    invalidate_cache_pattern(f"user:{user_id}*")
-    return user
+# Лучше использовать SCAN для больших БД
+def invalidate_pattern_safe(pattern: str):
+    cursor = 0
+    while True:
+        cursor, keys = redis_client.scan(cursor, match=pattern, count=100)
+        if keys:
+            redis_client.delete(*keys)
+        if cursor == 0:
+            break
 ```
 
 ### 5.3 TTL-based инвалидация
+
+**Автоматическая инвалидация:**
+- Установка TTL при записи
+- Автоматическое удаление при истечении
+- Не требует ручного управления
 
 ```python
 def cache_with_auto_invalidate(key: str, value: any, ttl: int = 300):
     redis_client.setex(key, ttl, json.dumps(value))
 ```
 
+### 5.4 Версионирование ключей
+
+**Принцип:** Изменение версии инвалидирует все старые ключи.
+
+```python
+CACHE_VERSION = "v1"
+
+def get_versioned_key(key: str) -> str:
+    return f"{CACHE_VERSION}:{key}"
+
+def invalidate_all():
+    global CACHE_VERSION
+    CACHE_VERSION = f"v{int(CACHE_VERSION[1:]) + 1}"
+```
+
 ---
 
 ## 6. Распределённое кеширование
 
+**Распределённый кеш** — кеш, разделяемый между несколькими серверами.
+
 ### 6.1 Redis Cluster
+
+**Кластеризация Redis:**
+- Шардирование данных
+- Высокая доступность
+- Масштабируемость
 
 ```python
 from redis.cluster import RedisCluster
@@ -309,7 +473,6 @@ redis_cluster = RedisCluster(
     startup_nodes=[
         {"host": "127.0.0.1", "port": "7000"},
         {"host": "127.0.0.1", "port": "7001"},
-        {"host": "127.0.0.1", "port": "7002"},
     ],
     decode_responses=True
 )
@@ -317,16 +480,27 @@ redis_cluster = RedisCluster(
 
 ### 6.2 Кеширование сессий
 
+**Использование Redis для сессий:**
+- Хранение сессий между серверами
+- TTL для автоматического истечения
+- Быстрый доступ
+
 ```python
 import secrets
-import redis
-
-redis_client = redis.Redis(host='localhost', port=6379, db=0)
+import json
+from datetime import datetime
 
 def create_session(user_id: int) -> str:
     session_id = secrets.token_urlsafe(32)
-    session_data = {"user_id": user_id, "created_at": datetime.now().isoformat()}
-    redis_client.setex(f"session:{session_id}", 3600, json.dumps(session_data))
+    session_data = {
+        "user_id": user_id,
+        "created_at": datetime.now().isoformat()
+    }
+    redis_client.setex(
+        f"session:{session_id}",
+        3600,  # 1 час
+        json.dumps(session_data)
+    )
     return session_id
 
 def get_session(session_id: str):
@@ -336,136 +510,35 @@ def get_session(session_id: str):
     return None
 ```
 
----
+### 6.3 Репликация
 
-## 7. Интеграция с FastAPI
-
-### 7.1 Dependency для кеша
-
-```python
-from fastapi import FastAPI, Depends
-import redis
-
-def get_redis():
-    return redis.Redis(host='localhost', port=6379, db=0)
-
-@app.get("/users/{user_id}")
-def get_user(user_id: int, cache: redis.Redis = Depends(get_redis)):
-    cache_key = f"user:{user_id}"
-    cached = cache.get(cache_key)
-    
-    if cached:
-        return json.loads(cached)
-    
-    user = fetch_user_from_db(user_id)
-    cache.setex(cache_key, 300, json.dumps(user))
-    return user
-```
-
-### 7.2 Middleware для кеширования
-
-```python
-from fastapi import FastAPI, Request
-import hashlib
-import json
-
-@app.middleware("http")
-async def cache_middleware(request: Request, call_next):
-    if request.method != "GET":
-        response = await call_next(request)
-        return response
-    
-    cache_key = hashlib.md5(
-        f"{request.url.path}{str(request.query_params)}".encode()
-    ).hexdigest()
-    
-    cached = redis_client.get(cache_key)
-    if cached:
-        from fastapi.responses import Response
-        return Response(
-            content=cached,
-            media_type="application/json"
-        )
-    
-    response = await call_next(request)
-    
-    if response.status_code == 200:
-        body = b""
-        async for chunk in response.body_iterator:
-            body += chunk
-        redis_client.setex(cache_key, 60, body)
-        return Response(content=body, media_type="application/json")
-    
-    return response
-```
+**Master-Slave репликация:**
+- Чтение с реплик
+- Запись в master
+- Повышение доступности
 
 ---
 
-## 8. Best Practices
+## 7. Оптимизация и производительность
 
-### 8.1 Выбор стратегии кеширования
+### 7.1 Пайплайнинг
 
-- **Часто читаемые, редко изменяемые данные** — Cache-Aside
-- **Критичные данные** — Write-Through
-- **Высокая нагрузка на запись** — Write-Back
-
-### 8.2 Размер кеша
+**Pipeline** — группировка команд для уменьшения round-trips.
 
 ```python
-MAX_CACHE_SIZE = 1000
-
-def manage_cache_size():
-    if redis_client.dbsize() > MAX_CACHE_SIZE:
-        redis_client.flushdb()
+pipe = redis_client.pipeline()
+pipe.set('key1', 'value1')
+pipe.set('key2', 'value2')
+pipe.get('key1')
+results = pipe.execute()
 ```
 
-### 8.3 Мониторинг кеша
+### 7.2 Компрессия данных
 
-```python
-def get_cache_stats():
-    info = redis_client.info()
-    return {
-        "used_memory": info.get("used_memory_human"),
-        "keyspace_hits": info.get("keyspace_hits"),
-        "keyspace_misses": info.get("keyspace_misses"),
-        "hit_rate": info.get("keyspace_hits") / (info.get("keyspace_hits") + info.get("keyspace_misses"))
-    }
-```
-
-### 8.4 Обработка ошибок
-
-```python
-from fastapi import FastAPI, HTTPException
-import redis
-
-def safe_cache_get(key: str):
-    try:
-        return redis_client.get(key)
-    except redis.ConnectionError:
-        return None
-    except Exception as e:
-        logger.error(f"Cache error: {e}")
-        return None
-```
-
----
-
-## 9. Продвинутые техники
-
-### 9.1 Кеширование с версионированием
-
-```python
-CACHE_VERSION = "v1"
-
-def get_versioned_key(key: str) -> str:
-    return f"{CACHE_VERSION}:{key}"
-
-def invalidate_version():
-    global CACHE_VERSION
-    CACHE_VERSION = f"v{int(CACHE_VERSION[1:]) + 1}"
-```
-
-### 9.2 Кеширование с компрессией
+**Сжатие больших значений:**
+- Уменьшение использования памяти
+- Медленнее запись/чтение
+- Использовать для больших данных
 
 ```python
 import gzip
@@ -484,14 +557,146 @@ def cache_get_compressed(key: str):
     return None
 ```
 
-### 9.3 Кеширование с приоритетами
+### 7.3 Мониторинг кеша
+
+**Метрики:**
+- Hit rate (процент попаданий)
+- Miss rate (процент промахов)
+- Использование памяти
+- Количество ключей
 
 ```python
-def cache_set_priority(key: str, value: any, priority: int = 5, ttl: int = 300):
-    cache_data = {
-        "value": value,
-        "priority": priority,
-        "timestamp": datetime.now().isoformat()
+def get_cache_stats():
+    info = redis_client.info()
+    hits = info.get("keyspace_hits", 0)
+    misses = info.get("keyspace_misses", 0)
+    total = hits + misses
+    
+    return {
+        "used_memory": info.get("used_memory_human"),
+        "keyspace_hits": hits,
+        "keyspace_misses": misses,
+        "hit_rate": hits / total if total > 0 else 0
     }
-    redis_client.setex(key, ttl, json.dumps(cache_data))
 ```
+
+---
+
+## 8. Best Practices
+
+### 8.1 Выбор стратегии кеширования
+
+**Рекомендации:**
+- **Часто читаемые, редко изменяемые** — Cache-Aside
+- **Критичные данные** — Write-Through
+- **Высокая нагрузка на запись** — Write-Back
+- **Нужна актуальность** — Refresh-Ahead
+
+### 8.2 Размер кеша
+
+**Управление размером:**
+- Ограничение максимального размера
+- Использование LRU/LFU для вытеснения
+- Мониторинг использования памяти
+
+```python
+MAX_CACHE_SIZE = 1000
+
+def manage_cache_size():
+    if redis_client.dbsize() > MAX_CACHE_SIZE:
+        # Очистка старых ключей или использование LRU
+        pass
+```
+
+### 8.3 Ключи кеша
+
+**Правила именования:**
+- Использовать префиксы (`user:`, `session:`)
+- Включать версию при необходимости
+- Избегать специальных символов
+- Делать ключи читаемыми
+
+**Примеры:**
+- `user:123:profile`
+- `session:abc123`
+- `cache:v1:data:key`
+
+### 8.4 TTL
+
+**Выбор TTL:**
+- Короткий TTL для часто изменяемых данных
+- Длинный TTL для статических данных
+- Адаптивный TTL в зависимости от частоты обновления
+
+### 8.5 Обработка ошибок
+
+**Стратегии:**
+- Graceful degradation — при сбое Redis работать без кеша
+- Fallback на БД
+- Логирование ошибок
+- Retry для временных сбоев
+
+```python
+def safe_cache_get(key: str):
+    try:
+        return redis_client.get(key)
+    except redis.ConnectionError:
+        # Fallback на БД
+        return None
+    except Exception as e:
+        logger.error(f"Cache error: {e}")
+        return None
+```
+
+### 8.6 Избегание проблем
+
+**Типичные ошибки:**
+- Кеширование слишком большого объёма данных
+- Отсутствие инвалидации при обновлении
+- Использование `KEYS` на больших БД (использовать `SCAN`)
+- Кеширование чувствительных данных без шифрования
+- Отсутствие мониторинга
+
+---
+
+## 9. Сравнение подходов
+
+### 9.1 In-memory vs Redis
+
+| Критерий | In-memory | Redis |
+|---------|-----------|-------|
+| Скорость | Очень высокая | Высокая |
+| Распределение | Нет | Да |
+| Персистентность | Нет | Опционально |
+| Сложность | Просто | Средне |
+| Масштабируемость | Ограничена | Высокая |
+
+### 9.2 Когда использовать
+
+**In-memory:**
+- Односерверное приложение
+- Быстрые вычисления
+- Небольшой объём данных
+- Временные данные
+
+**Redis:**
+- Микросервисы
+- Несколько серверов
+- Большой объём данных
+- Сессии пользователей
+- Очереди задач
+
+---
+
+## 10. Полезные библиотеки
+
+**Python:**
+- `redis` — клиент для Redis
+- `cachetools` — продвинутые алгоритмы кеширования
+- `functools.lru_cache` — встроенный LRU кеш
+- `diskcache` — кеш на диске
+
+**Инструменты:**
+- `redis-cli` — командная строка Redis
+- `redis-benchmark` — тестирование производительности
+- `redis-stat` — мониторинг Redis
