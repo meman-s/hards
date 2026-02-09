@@ -42,12 +42,18 @@ nav:
     - Кэширование (Redis, in-memory, LRU): backend/Caching_Redis_inmemory_lru_cache.md
     - FastAPI (DI, middleware, background tasks): backend/FastAPI_dependency_injection_middleware_background_tasks.md
     - Файлы (загрузка, хранение, обработка): backend/File_handling_upload_storage_processing.md
-    - Nginx (reverse proxy, load balancing): backend/Nginx_reverse_proxy_load_balancing.md
+    - Nginx:
+      - Обзор: backend/nginx/README.md
+      - Reverse proxy и load balancing: backend/nginx/Nginx_reverse_proxy_load_balancing.md
+      - Схемы и концепции: backend/nginx/Nginx_схемы_и_концепции.md
+      - Обучение с примерами: backend/nginx/Nginx_обучение_с_примерами.md
+      - Практические упражнения: backend/nginx/Nginx_практические_упражнения.md
     - Pydantic (валидация, сериализация): backend/Pydantic_validation_serialization.md
     - RPC vs REST: backend/RPC_vs_REST.md
     - Безопасность (CORS, CSRF, XSS, SQL injection, rate limiting): backend/Security_CORS_CSRF_XSS_SQL_injection_Rate_limiting.md
     - Short/Long Polling, WebSocket, SSE: backend/ShortPolling_LongPolling_WebSocket_SSE.md
-    - SQLAlchemy, Alembic, ORM, миграции: backend/SQLAlchemy_Alembic_ORM_migrations.md
+    - SQL:
+      - SQLAlchemy, Alembic, ORM, миграции: backend/SQLAlchemy_Alembic_ORM_migrations.md
 
   - Python:
     - Collections (deque, Counter, defaultdict): python/Collections.md

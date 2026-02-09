@@ -32,7 +32,8 @@ CREATE TABLE customers (
 
 CREATE TABLE products (
     product_id INT PRIMARY KEY,
-    product_name VARCHAR(100),
+    product_name VARCHAR(100),￼
+￼
     product_price DECIMAL(10,2)
 );
 
