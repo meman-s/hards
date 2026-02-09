@@ -1,0 +1,80 @@
+site_name: Hards — тяжёлые навыки
+site_description: Конспекты и материалы по бэкенду, Python, архитектуре и методологиям
+site_author: Hards
+
+repo_url: https://github.com/meman-s/hards
+edit_uri: edit/main/
+
+docs_dir: docs
+
+theme:
+  name: material
+  language: ru
+  palette:
+    - scheme: default
+      primary: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Тёмная тема
+    - scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Светлая тема
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.tabs.link
+    - toc.integrate
+
+plugins:
+  - search
+
+nav:
+  - Главная: index.md
+
+  - Backend:
+    - API документация (OpenAPI/Swagger): backend/API_documentation_OpenAPI_Swagger.md
+    - Версионирование API: backend/API_versioning.md
+    - Аутентификация и авторизация (JWT, OAuth2, Session): backend/Authentication_authorization_JWT_OAuth2_Session.md
+    - Кэширование (Redis, in-memory, LRU): backend/Caching_Redis_inmemory_lru_cache.md
+    - FastAPI (DI, middleware, background tasks): backend/FastAPI_dependency_injection_middleware_background_tasks.md
+    - Файлы (загрузка, хранение, обработка): backend/File_handling_upload_storage_processing.md
+    - Nginx (reverse proxy, load balancing): backend/Nginx_reverse_proxy_load_balancing.md
+    - Pydantic (валидация, сериализация): backend/Pydantic_validation_serialization.md
+    - RPC vs REST: backend/RPC_vs_REST.md
+    - Безопасность (CORS, CSRF, XSS, SQL injection, rate limiting): backend/Security_CORS_CSRF_XSS_SQL_injection_Rate_limiting.md
+    - Short/Long Polling, WebSocket, SSE: backend/ShortPolling_LongPolling_WebSocket_SSE.md
+    - SQLAlchemy, Alembic, ORM, миграции: backend/SQLAlchemy_Alembic_ORM_migrations.md
+
+  - Python:
+    - Collections (deque, Counter, defaultdict): python/Collections.md
+    - Контекстные менеджеры: python/Context_managers.md
+    - Dataclasses, attrs, Pydantic: python/Dataclasses_attrs_Pydantic.md
+    - Декораторы: python/Decorators.md
+    - Functools и itertools: python/Functools_itertools.md
+    - Генераторы, итераторы, async: python/Generators_iterators_async.md
+    - Threading, multiprocessing, async: python/Threading_multiprocessing_async.md
+    - Type hints, mypy, статическая проверка: python/Type_hints_mypy_static_checking.md
+
+  - Архитектура:
+    - Архитектурные стили и подходы: архитектура/Архитектурные_стили_и_подходы.md
+    - Документирование и валидация архитектуры: архитектура/Документирование_и_валидация_архитектуры.md
+    - Принципы и паттерны проектирования: архитектура/Принципы_и_паттерны_проектирования.md
+
+  - Методологии:
+    - Методологии разработки: методологии/Методологии_разработки.md
+    - Требования к проекту (конспект): методологии/Требования_к_проекту_конспект.md
+
+  - Код и алгоритмы:
+    - Алгоритмы на графах: code/graph_algorithms/README.md
+
+markdown_extensions:
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - tables
+  - attr_list
+  - md_in_html
