@@ -276,6 +276,69 @@ EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
+Построчный разбор Dockerfile:
+
+- `# syntax=docker/dockerfile:1`  
+  Включает расширенный синтаксис Dockerfile (BuildKit), чтобы можно было использовать `RUN --mount=type=ssh` и `--mount=type=secret`.
+
+- `FROM python:3.11-slim AS git_deps`  
+  Первый этап multi-stage, основанный на `python:3.11-slim`. Имя этапа `git_deps` нужно, чтобы потом копировать из него файлы.
+
+- `RUN apt-get update && apt-get install -y git openssh-client && rm -rf /var/lib/apt/lists/*`  
+  Обновляет список пакетов, устанавливает `git` и ssh-клиент, а затем удаляет кэш apt, чтобы не раздувать слой образа.
+
+- `WORKDIR /deps`  
+  Устанавливает рабочую директорию `/deps` для всех следующих команд в этом этапе.
+
+- `RUN --mount=type=ssh \` и `git clone git@github.com:org/private-lib.git .`  
+  Через `--mount=type=ssh` временно подключает ssh-ключи из ssh-агента хоста и клонирует приватный репозиторий в `/deps`. Ключи не сохраняются в образе.
+
+- `FROM python:3.11-slim AS builder`  
+  Второй этап multi-stage, где ставятся Python-зависимости и готовится окружение для приложения.
+
+- `WORKDIR /app`  
+  Рабочая директория этого этапа — `/app`.
+
+- `ENV PIP_NO_CACHE_DIR=1`  
+  Говорит pip не сохранять кэш скачанных пакетов, чтобы уменьшить размер образа.
+
+- `COPY requirements.txt .`  
+  Копирует `requirements.txt` из контекста сборки в `/app` внутри контейнера.
+
+- `RUN --mount=type=secret,id=pip_conf \` и три последующие строки  
+  Через `--mount=type=secret,id=pip_conf` монтируется временный файл `/run/secrets/pip_conf`.  
+  Затем создаётся `/root/.pip`, туда копируется `pip_conf` как `pip.conf`, после чего `pip install --user -r requirements.txt` устанавливает зависимости в `/root/.local`, используя приватный репозиторий из конфига.
+
+- `COPY --from=git_deps /deps ./private-lib`  
+  Копирует результат первого этапа (`/deps` из `git_deps`) в `/app/private-lib` текущего этапа, чтобы приватная библиотека была рядом с кодом приложения.
+
+- `COPY . .`  
+  Копирует исходный код текущего проекта в `/app`.
+
+- `FROM python:3.11-slim AS runtime`  
+  Третий, финальный этап — чистый рантайм-образ, который будет использоваться в проде.
+
+- `WORKDIR /app`  
+  Рабочая директория рантайм-образа — `/app`.
+
+- `COPY --from=builder /root/.local /root/.local`  
+  Копирует установленный на этапе `builder` набор Python-зависимостей в финальный образ.
+
+- `COPY . .`  
+  Копирует исходный код приложения в `/app` финального образа.
+
+- `ENV PATH=/root/.local/bin:$PATH`  
+  Добавляет в `PATH` папку с пользовательскими бинарниками, установленными pip, чтобы можно было вызывать их без полного пути.
+
+- `ENV PYTHONUNBUFFERED=1`  
+  Отключает буферизацию вывода Python, чтобы логи сразу писались в stdout/stderr.
+
+- `EXPOSE 8000`  
+  Документирует, что приложение внутри контейнера слушает порт `8000`.
+
+- `CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]`  
+  Команда по умолчанию при запуске контейнера: стартует uvicorn с приложением `app.main:app`, на всех интерфейсах (`0.0.0.0`) и порту `8000`.
+
 Как собирать:
 
 ```bash
