@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+FROM python:3.11-slim AS deps
+
+RUN apt-get update && apt-get install -y openssh-client && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /deps
+
+RUN --mount=type=ssh \
+    git clone git@github.com:org/private-lib.git .
+
+FROM python:3.11-slim AS runtime
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
+
+COPY --from=deps /deps ./private-repo
+COPY . .
+
+ENV PATH=/root/.local/bin:$PATH
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
