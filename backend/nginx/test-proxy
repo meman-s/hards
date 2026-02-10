@@ -1,0 +1,36 @@
+upstream backend {
+    least_conn;
+    server 127.0.0.1:8000 max_fails=2 fail_timeout=10s;
+    server 127.0.0.1:8001 max_fails=2 fail_timeout=10s;
+    server 127.0.0.1:8002 max_fails=2 fail_timeout=10s;
+}
+
+server {
+    listen 80;
+    server_name localhost;
+
+    access_log /var/log/nginx/test.access.log;
+    error_log /var/log/nginx/test.error.log;
+
+    location /static/ {
+        alias /var/www/static/;
+        expires 30d;
+    }
+
+    location / {
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        add_header X-Backend-Server $upstream_addr;
+    }
+
+    location /nginx_status {
+        stub_status on;
+        access_log off;
+        allow 127.0.0.1;
+        deny all;
+    }
+}
