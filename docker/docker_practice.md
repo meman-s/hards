@@ -1,213 +1,216 @@
-# Docker: multi-stage builds, secrets, ssh mount — примеры тестовых заданий
+# Docker: multi-stage builds, secrets, ssh mount для Python — примеры тестовых заданий
 
 В этом файле собраны примеры того, как выглядят тестовые задания на тему:
 
-- multi-stage Dockerfile
-- build secrets
-- ssh mount
+- multi-stage Dockerfile для Python-приложений
+- build secrets для приватных pip репозиториев
+- ssh mount для доступа к приватным git репозиториям
 
-Формат заданий такой же, как на тестах:
+Формат заданий:
 
-- дан упрощённый `Dockerfile`
+- дан упрощённый `Dockerfile` для Python сервиса
 - нужно что‑то добавить или переписать
 - ниже — возможное решение и подробное объяснение
 
-## Задание 1. Оптимизировать Dockerfile с помощью multi-stage
+## Задание 1. Оптимизировать Python Dockerfile с помощью multi-stage
 
 Условие:
 
-- дан Dockerfile для Node.js приложения
-- образ получился тяжёлый, в нём остаются dev-зависимости и исходники
-- нужно переписать Dockerfile на multi-stage, чтобы финальный образ содержал только production-зависимости и сборку
+- дан Dockerfile для Python API (например, FastAPI)
+- образ получился тяжёлый, в нём остаются инструменты сборки и кэш pip
+- нужно переписать Dockerfile на multi-stage, чтобы финальный образ содержал только установленные зависимости и код приложения
 
 Исходный Dockerfile:
 
 ```dockerfile
-FROM node:18-alpine
+FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install
+COPY requirements.txt .
+RUN pip install -r requirements.txt
 
 COPY . .
 
-RUN npm run build
+EXPOSE 8000
 
-EXPOSE 3000
-
-CMD ["node", "dist/index.js"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 Возможное решение:
 
 ```dockerfile
-FROM node:18-alpine AS builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+ENV PIP_NO_CACHE_DIR=1
+
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
 
 COPY . .
-RUN npm run build
 
-FROM node:18-alpine AS runtime
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package.json ./
-RUN npm ci --only=production
+COPY --from=builder /root/.local /root/.local
+COPY . .
 
-EXPOSE 3000
+ENV PATH=/root/.local/bin:$PATH
 
-CMD ["node", "dist/index.js"]
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 Пояснение:
 
-- первый этап `builder` ставит все зависимости и собирает проект
-- второй этап `runtime` копирует только результат сборки и минимальный набор файлов
-- dev-зависимости и исходники не попадают в финальный образ
-- финальный образ меньше по размеру и безопаснее
+- первый этап `builder` устанавливает зависимости в пользовательскую директорию
+- второй этап `runtime` копирует только установленные пакеты и исходный код
+- в финальном образе нет кэша pip и временных файлов, образ меньше по размеру
 
-## Задание 2. Добавить secret для приватного npm репозитория
+## Задание 2. Добавить secret для приватного pip репозитория
 
 Условие:
 
-- дан multi-stage Dockerfile
-- часть зависимостей лежит в приватном npm репозитории
-- токен для доступа к репозиторию нельзя класть в образ в виде `ENV`
+- дан multi-stage Dockerfile для Python
+- часть зависимостей лежит в приватном pip репозитории (например, в GitHub Packages)
+- конфиг `pip.conf` с токенами нельзя класть в образ напрямую
 - нужно использовать build secret и BuildKit
 
 Исходный Dockerfile (упрощённый):
 
 ```dockerfile
-FROM node:18-alpine AS builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
 
 COPY . .
-RUN npm run build
 
-FROM node:18-alpine
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package.json ./
-RUN npm ci --only=production
+COPY --from=builder /root/.local /root/.local
+COPY . .
 
-CMD ["node", "dist/index.js"]
+ENV PATH=/root/.local/bin:$PATH
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 Возможное решение с секретом:
 
 ```dockerfile
 # syntax=docker/dockerfile:1
-FROM node:18-alpine AS builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN --mount=type=secret,id=npm_token \
-  echo "//registry.npmjs.org/:_authToken=$(cat /run/secrets/npm_token)" > .npmrc && \
-  npm ci && \
-  rm .npmrc
+ENV PIP_NO_CACHE_DIR=1
+
+COPY requirements.txt .
+RUN --mount=type=secret,id=pip_conf \
+  mkdir -p /root/.pip && \
+  cp /run/secrets/pip_conf /root/.pip/pip.conf && \
+  pip install --user -r requirements.txt
 
 COPY . .
-RUN npm run build
 
-FROM node:18-alpine AS runtime
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package.json ./
-RUN npm ci --only=production
+COPY --from=builder /root/.local /root/.local
+COPY . .
 
-CMD ["node", "dist/index.js"]
+ENV PATH=/root/.local/bin:$PATH
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 Как собирать:
 
 ```bash
-echo "my-secret-token" > npm_token.txt
-
 export DOCKER_BUILDKIT=1
 
+cp pip.conf pip_conf.txt
+
 docker build \
-  --secret id=npm_token,src=npm_token.txt \
+  --secret id=pip_conf,src=pip_conf.txt \
   -t myapp:latest .
 ```
 
 Пояснение:
 
 - директива `# syntax=docker/dockerfile:1` включает расширенный синтаксис Dockerfile для BuildKit
-- `--mount=type=secret,id=npm_token` монтирует файл `/run/secrets/npm_token` только внутри этого `RUN`
-- токен используется для генерации `.npmrc`, после установки зависимостей файл удаляется
-- секрет не попадает в слои образа и не виден в финальном контейнере
+- `--mount=type=secret,id=pip_conf` монтирует временный файл `/run/secrets/pip_conf` только внутри этого `RUN`
+- `pip.conf` используется для настройки приватного репозитория и не попадает в слои образа
 
-## Задание 3. Добавить ssh mount для клонирования приватного репозитория
+## Задание 3. Добавить ssh mount для клонирования приватного Python репозитория
 
 Условие:
 
-- часть кода лежит в приватном git-репозитории на GitHub
+- часть кода или зависимостей лежит в приватном git-репозитории на GitHub
 - нужно при сборке образа клонировать этот репозиторий
 - ssh ключ не должен попадать в образ
-- нужно использовать ssh mount и, желательно, multi-stage
+- нужно использовать ssh mount и multi-stage
 
 Исходный Dockerfile (упрощённый):
 
 ```dockerfile
-FROM node:18-alpine
+FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
 
 COPY . .
 
-CMD ["npm", "start"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 Возможное решение:
 
 ```dockerfile
 # syntax=docker/dockerfile:1
-FROM alpine/git AS git-stage
+FROM python:3.11-slim AS deps
 
-WORKDIR /src
+RUN apt-get update && apt-get install -y git openssh-client && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /deps
 
 RUN --mount=type=ssh \
   git clone git@github.com:org/private-repo.git .
 
-FROM node:18-alpine AS runtime
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-COPY --from=git-stage /src ./private-repo
+COPY requirements.txt .
+RUN pip install --user -r requirements.txt
 
-COPY package*.json ./
-RUN npm ci
-
+COPY --from=deps /deps ./private-repo
 COPY . .
 
-CMD ["npm", "start"]
+ENV PATH=/root/.local/bin:$PATH
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 Как собирать:
 
 ```bash
+export DOCKER_BUILDKIT=1
+
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_rsa
-
-export DOCKER_BUILDKIT=1
 
 docker build \
   --ssh default \
@@ -216,84 +219,83 @@ docker build \
 
 Пояснение:
 
-- первый этап `git-stage` использует образ `alpine/git` для работы с git
-- `--mount=type=ssh` даёт доступ к ssh-ключам агента только внутри этого `RUN`
-- приватный репозиторий клонируется в `/src`
-- второй этап `runtime` копирует уже скачанный код и собирает приложение
-- ssh ключи не попадают в финальный образ
+- первый этап `deps` устанавливает git и через ssh mount клонирует приватный репозиторий
+- второй этап `runtime` копирует результат клонирования и устанавливает зависимости приложения
+- ssh ключи доступны только во время шага `RUN --mount=type=ssh` и не попадают в финальный образ
 
-## Задание 4. Комбинация: multi-stage + secrets + ssh mount
+## Задание 4. Комбинация: multi-stage + secrets + ssh mount для Python
 
 Условие:
 
 - нужно показать, что ты умеешь комбинировать все три фичи
-- приложение на Node.js
-- зависимости частично лежат в приватном npm репозитории (токен через secret)
-- часть кода в приватном git репозитории (доступ по ssh)
-- финальный образ должен быть небольшим (multi-stage)
+- Python API (FastAPI или Django)
+- часть кода лежит в приватном git репозитории
+- часть зависимостей доступна только через приватный pip репозиторий
+- финальный образ должен быть компактным
 
 Возможное решение:
 
 ```dockerfile
 # syntax=docker/dockerfile:1
-FROM alpine/git AS git-stage
+FROM python:3.11-slim AS git_deps
+
+RUN apt-get update && apt-get install -y git openssh-client && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /deps
 
 RUN --mount=type=ssh \
   git clone git@github.com:org/private-lib.git .
 
-FROM node:18-alpine AS builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN --mount=type=secret,id=npm_token \
-  echo "//registry.npmjs.org/:_authToken=$(cat /run/secrets/npm_token)" > .npmrc && \
-  npm ci && \
-  rm .npmrc
+ENV PIP_NO_CACHE_DIR=1
 
-COPY --from=git-stage /deps ./private-lib
+COPY requirements.txt .
+RUN --mount=type=secret,id=pip_conf \
+  mkdir -p /root/.pip && \
+  cp /run/secrets/pip_conf /root/.pip/pip.conf && \
+  pip install --user -r requirements.txt
+
+COPY --from=git_deps /deps ./private-lib
 COPY . .
 
-RUN npm run build
-
-FROM node:18-alpine AS runtime
+FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-ENV NODE_ENV=production
+COPY --from=builder /root/.local /root/.local
+COPY . .
 
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package.json ./
-RUN npm ci --only=production
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONUNBUFFERED=1
 
-EXPOSE 3000
+EXPOSE 8000
 
-CMD ["node", "dist/index.js"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 Как собирать:
 
 ```bash
-echo "my-secret-token" > npm_token.txt
+export DOCKER_BUILDKIT=1
+
+cp pip.conf pip_conf.txt
 
 eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_rsa
 
-export DOCKER_BUILDKIT=1
-
 docker build \
   --ssh default \
-  --secret id=npm_token,src=npm_token.txt \
+  --secret id=pip_conf,src=pip_conf.txt \
   -t myapp:latest .
 ```
 
 Что здесь важно для собеседования:
 
-- умеешь разбивать Dockerfile на логичные этапы
-- понимаешь, что и secrets, и ssh mount работают только во время сборки и не попадают в финальный образ
-- умеешь комбинировать эти механизмы в одном Dockerfile
+- умеешь разбивать Dockerfile на этапы: отдельный этап для git зависимостей, отдельный для установки пакетов, отдельный для рантайма
+- понимаешь, что secrets и ssh mount работают только внутри конкретных команд `RUN` и не попадают в финальный образ
+- умеешь адаптировать эти приёмы под Python стек, а не только под Node.js
 
-Когда разберёшься с этими примерами, напиши, и я подготовлю для тебя отдельный файл с заданиями без решений, чтобы ты мог потренироваться самостоятельно.
-
+Когда разберёшься с этими примерами, напиши, и я подготовлю для тебя отдельный файл с Python-заданиями без решений, чтобы ты мог потренироваться самостоятельно.
