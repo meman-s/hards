@@ -4,3 +4,4 @@ pymdown-extensions>=10.0
 fastapi
 uvicorn
 redis
+pymongo
