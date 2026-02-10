@@ -225,3 +225,203 @@ order by total_spent DESC
 -- GROUP BY c.customer_id, c.customer_name
 -- HAVING SUM(oi.quantity * p.product_price) > 50000
 -- ORDER BY total_spent DESC;
+
+-- ЗАДАЧА 4: Средний чек по клиентам
+-- Напишите запрос, который выведет имя клиента и его средний чек
+-- по завершенным заказам (status = 'completed').
+-- Средний чек считается как сумма всех его завершенных заказов,
+-- поделенная на количество завершенных заказов.
+-- В результат включите только тех клиентов, у кого средний чек больше 15000.
+-- Отсортируйте результат по среднему чеку по убыванию.
+--
+-- Ожидаемый результат (пример):
+-- customer_name   | avg_check
+-- Иван Иванов    | ...
+
+-- ВАШ ЗАПРОС ЗДЕСЬ:
+
+with order_sum as (
+    select
+        c.customer_id,
+        c.customer_name,
+        sum(oi.quantity * p.product_price) as total_sum,
+        count(distinct o.order_id) as orders_count
+    from customers c
+    join orders o on c.customer_id = o.customer_id
+    join order_items oi on o.order_id = oi.order_id
+    join products p on oi.product_id = p.product_id
+    where o.status = 'completed'
+    group by c.customer_id, c.customer_name
+)
+
+select
+    customer_name,
+    total_sum / orders_count as avg_check
+from order_sum
+where total_sum / orders_count > 15000
+order by avg_check DESC;
+
+
+ 
+
+-- ЗАДАЧА 5: Топ‑товары по проданному количеству
+-- Напишите запрос, который выведет для каждой категории название товара
+-- и общее проданное количество этого товара.
+-- Учитывайте только завершенные заказы (status = 'completed').
+-- В результат включите только те товары, у которых продано суммарно
+-- не менее 2 единиц.
+-- Отсортируйте результат сначала по категории, затем по количеству по убыванию.
+--
+-- Ожидаемый результат (пример):
+-- category     | product_name | total_qty
+-- Электроника | Ноутбук      | ...
+
+-- ВАШ ЗАПРОС ЗДЕСЬ:
+
+with top_product as (
+    select
+        p.category,
+        p.product_name,
+        sum(oi.quantity) as total
+    from products p
+    join order_items oi on p.product_id = oi.product_id
+    join orders o on oi.order_id = o.order_id
+    where o.status = 'completed'
+    group by p.category, p.product_name
+)
+
+select
+    t.category,
+    t.product_name,
+    t.total
+from top_product t
+where t.total >= 2
+order by t.category, t.total desc;
+
+
+-- ЗАДАЧА 6: Выручка по месяцам
+-- Напишите запрос, который выведет месяц и год оформления заказа
+-- и общую выручку за этот месяц по завершенным заказам (status = 'completed').
+-- Используйте сумму стоимости всех позиций заказов за месяц.
+-- Результат отсортируйте по году и месяцу по возрастанию.
+--
+-- Ожидаемый результат (пример):
+-- year | month | total_revenue
+-- 2024 | 1     | ...
+
+-- ВАШ ЗАПРОС ЗДЕСЬ:
+
+select
+    EXTRACT(YEAR FROM o.order_date) as year,
+    EXTRACT(month FROM o.order_date) as month,
+    sum(oi.quantity * p.product_price) as total_revenue
+from orders as o
+join order_items oi on o.order_id = oi.order_id
+join products p on oi.product_id = p.product_id
+where o.status = 'completed'
+group by EXTRACT(YEAR FROM o.order_date), EXTRACT(month FROM o.order_date)
+order by year, month asc;
+
+-- ЗАДАЧА 7: Индекс для поиска клиента по email
+-- В интернет-магазине часто выполняются запросы по email клиента, например:
+-- SELECT * FROM customers WHERE customer_email = 'example@mail.ru';
+-- Напишите DDL-запрос, который создаст уникальный индекс на поле customer_email
+-- в таблице customers, чтобы:
+-- 1) ускорить поиск клиентов по email
+-- 2) гарантировать, что email одного клиента не может повторяться у другого.
+--
+-- ВАШ ЗАПРОС ЗДЕСЬ:
+
+create unique index idx_customer_email on customers(customer_email);
+
+
+-- ЗАДАЧА 8: Триггер проверки количества товара в позиции заказа
+-- В таблице order_items поле quantity хранит количество единиц товара в позиции заказа.
+-- По логике бизнес-процесса количество не может быть нулевым или отрицательным.
+-- Напишите триггер (и при необходимости функцию для него), который при вставке
+-- или обновлении строки в order_items будет проверять:
+-- - если NEW.quantity <= 0, то нужно запретить операцию и выбросить ошибку
+-- - если NEW.quantity > 0, то запись должна успешно сохраняться.
+--
+-- ВАШ КОД ЗДЕСЬ:
+create or replace function check_quantity()
+returns trigger as $$
+BEGIN
+    if new.quantity <= 0 THEN
+        RAISE EXCEPTION 'sldkf';
+    end if;
+    return new;
+
+end;
+$$ LANGUAGE plpgsql;
+
+create trigger trigger_check_quantity
+before INSERT or UPDATE on order_items
+for each row
+execute function check_quantity();
+
+
+
+-- РЕШЕНИЕ ЗАДАЧИ 4:
+-- SELECT
+--     c.customer_name,
+--     AVG(order_sum) as avg_check
+-- FROM (
+--     SELECT
+--         o.order_id,
+--         o.customer_id,
+--         SUM(oi.quantity * p.product_price) as order_sum
+--     FROM orders o
+--     JOIN order_items oi ON o.order_id = oi.order_id
+--     JOIN products p ON oi.product_id = p.product_id
+--     WHERE o.status = 'completed'
+--     GROUP BY o.order_id, o.customer_id
+-- ) t
+-- JOIN customers c ON c.customer_id = t.customer_id
+-- GROUP BY c.customer_name
+-- HAVING AVG(order_sum) > 15000
+-- ORDER BY avg_check DESC;
+
+-- РЕШЕНИЕ ЗАДАЧИ 5:
+-- SELECT
+--     p.category,
+--     p.product_name,
+--     SUM(oi.quantity) as total_qty
+-- FROM products p
+-- JOIN order_items oi ON p.product_id = oi.product_id
+-- JOIN orders o ON oi.order_id = o.order_id
+-- WHERE o.status = 'completed'
+-- GROUP BY p.category, p.product_name
+-- HAVING SUM(oi.quantity) >= 2
+-- ORDER BY p.category, total_qty DESC;
+
+-- РЕШЕНИЕ ЗАДАЧИ 6:
+-- SELECT
+--     EXTRACT(YEAR FROM o.order_date) as year,
+--     EXTRACT(MONTH FROM o.order_date) as month,
+--     SUM(oi.quantity * p.product_price) as total_revenue
+-- FROM orders o
+-- JOIN order_items oi ON o.order_id = oi.order_id
+-- JOIN products p ON oi.product_id = p.product_id
+-- WHERE o.status = 'completed'
+-- GROUP BY EXTRACT(YEAR FROM o.order_date), EXTRACT(MONTH FROM o.order_date)
+-- ORDER BY year, month;
+
+-- РЕШЕНИЕ ЗАДАЧИ 7:
+-- CREATE UNIQUE INDEX idx_customers_email ON customers(customer_email);
+
+-- РЕШЕНИЕ ЗАДАЧИ 8 (пример для PostgreSQL):
+-- CREATE OR REPLACE FUNCTION check_order_item_quantity()
+-- RETURNS TRIGGER AS $$
+-- BEGIN
+--     IF NEW.quantity <= 0 THEN
+--         RAISE EXCEPTION 'quantity must be greater than 0';
+--     END IF;
+--     RETURN NEW;
+-- END;
+-- $$ LANGUAGE plpgsql;
+--
+-- CREATE TRIGGER trg_check_order_item_quantity
+-- BEFORE INSERT OR UPDATE ON order_items
+-- FOR EACH ROW
+-- EXECUTE FUNCTION check_order_item_quantity();
