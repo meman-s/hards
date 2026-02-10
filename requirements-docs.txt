@@ -5,3 +5,7 @@ fastapi
 uvicorn
 redis
 pymongo
+pytest
+pytest-cov 
+pytest-playwright
+pytest-xdist
