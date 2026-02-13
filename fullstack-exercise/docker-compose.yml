@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: postgres:14.8-alpine3.18
+    environment:
+      POSTGRES_DB: "practicedb"
+      POSTGRES_USER: "stepan"
+      POSTGRES_PASSWORD: "123123"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "stepan", "-d", "practicedb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init_db.sql:/docker-entrypoint-initdb.d/01_items.sql
+    networks:
+      - backend
+  mongo:
+    image: mongo:6
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+    environment:
+      - MONGO_INIT
+    networks:
+      - backend
+
+  redis:
+    image: redis:6
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - POSTGRES_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/practicedb
+      - MONGO_URL=mongodb://mongo:27017
+      - REDIS_URL=redis://redis:6379/0
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8000/api/health'')" || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./frontend:/frontend
+    depends_on:
+      - backend
+    networks:
+      - backend
+
+volumes:
+  postgres_data:
+  mongo_data:
+
+networks:
+  backend:

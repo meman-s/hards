@@ -78,23 +78,43 @@ r = Redis(
 # print(r.zrevrange('leaderboard:points', 0, 2))
 
 
-pubsub = r.pubsub()
+# pubsub = r.pubsub()
 
 
-def subscriber():
-    pubsub.subscribe('notifications')
+# def subscriber():
+#     pubsub.subscribe('notifications')
 
-    for message in pubsub.listen():
-        if message['type'] == 'message':
-            print(f"recieved {message['data']}")
+#     for message in pubsub.listen():
+#         if message['type'] == 'message':
+#             print(f"recieved {message['data']}")
 
 
-thread = threading.Thread(target=subscriber, daemon=True)
-thread.start()
+# thread = threading.Thread(target=subscriber, daemon=True)
+# thread.start()
 
-r.publish('notifications', 'hi')
-r.publish('notifications', "i'm Stepan")
-time.sleep(1)
-r.publish('notifications', 'jls;adjfl;jsadfl;k')
-time.sleep(1)
-pubsub.unsubscribe()
+# r.publish('notifications', 'hi')
+# r.publish('notifications', "i'm Stepan")
+# time.sleep(1)
+# r.publish('notifications', 'jls;adjfl;jsadfl;k')
+# time.sleep(1)
+# pubsub.unsubscribe()
+
+
+r.set("user:1:name", "vanya")
+print(r.get("user:1:name"))
+r.hset('user:2', mapping={
+    'name': 'Ivan',
+    "email": "@gmail.com"
+})
+print(r.hgetall("user:2"))
+
+r.lpush('tasks', "task2", "task2")
+r.rpush("tasks", "task3")
+print(r.lrange('tasks', 0, -1))
+
+r.zadd('leader', {
+    'user:1': 120,
+    'user:2': 110,
+    'user:3': 100,
+})
+print(r.zrevrange('leader', 0, -1, withscores=True))

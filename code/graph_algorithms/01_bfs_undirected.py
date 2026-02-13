@@ -1,12 +1,13 @@
 from collections import deque
-from typing import List
+from typing import List, Optional
 
 
 def bfs_undirected(
     graph: List[List[int]],
     start: int,
-    n: int,
+    n: Optional[int] = None,
 ) -> List[int]:
+    n = n if n is not None else len(graph)
     order: List[int] = []
     visited = [False] * n
     queue: deque[int] = deque([start])
@@ -25,8 +26,9 @@ def bfs_undirected(
 
 def bfs_undirected_all_components(
     graph: List[List[int]],
-    n: int,
+    n: Optional[int] = None,
 ) -> List[int]:
+    n = n if n is not None else len(graph)
     order: List[int] = []
     visited = [False] * n
 
@@ -54,5 +56,5 @@ if __name__ == "__main__":
         graph[a].append(b)
         graph[b].append(a)
 
-    print(bfs_undirected(graph, 0, n))
-    print(bfs_undirected_all_components(graph, n))
+    print(bfs_undirected(graph, 0))
+    print(bfs_undirected_all_components(graph))

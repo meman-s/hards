@@ -185,7 +185,7 @@ def mock_db():
 def test_user_service_create_user(mock_db):
     service = UserService(mock_db)
     user = service.create_user("Alice", "alice@example.com")
-    
+
     assert user["name"] == "Alice"
     assert user["email"] == "alice@example.com"
     assert user["id"] == 1
@@ -194,10 +194,10 @@ def test_user_service_create_user(mock_db):
 
 def test_user_service_create_user_validation(mock_db):
     service = UserService(mock_db)
-    
+
     with pytest.raises(ValueError, match="Name and email are required"):
         service.create_user("", "test@example.com")
-    
+
     with pytest.raises(ValueError, match="Invalid email format"):
         service.create_user("Test", "invalid-email")
 
@@ -206,7 +206,7 @@ def test_user_service_get_user(mock_db):
     service = UserService(mock_db)
     created_user = service.create_user("Bob", "bob@example.com")
     user_id = created_user["id"]
-    
+
     found_user = service.get_user(user_id)
     assert found_user["name"] == "Bob"
     assert found_user["email"] == "bob@example.com"
@@ -214,7 +214,7 @@ def test_user_service_get_user(mock_db):
 
 def test_user_service_get_user_not_found(mock_db):
     service = UserService(mock_db)
-    
+
     with pytest.raises(ValueError, match="User with id 999 not found"):
         service.get_user(999)
 
@@ -223,10 +223,10 @@ def test_user_service_delete_user(mock_db):
     service = UserService(mock_db)
     user = service.create_user("Charlie", "charlie@example.com")
     user_id = user["id"]
-    
+
     assert service.delete_user(user_id) is True
     assert len(mock_db) == 0
-    
+
     with pytest.raises(ValueError):
         service.get_user(user_id)
 
@@ -242,10 +242,10 @@ def test_api_client_get(mock_get):
     mock_response.json.return_value = {"status": "ok"}
     mock_response.raise_for_status.return_value = None
     mock_get.return_value = mock_response
-    
+
     client = APIClient("https://api.example.com")
     result = client.get("users")
-    
+
     assert result == {"status": "ok"}
     mock_get.assert_called_once_with(
         "https://api.example.com/users",
@@ -259,10 +259,10 @@ def test_api_client_post(mock_post):
     mock_response.json.return_value = {"id": 1, "name": "Test"}
     mock_response.raise_for_status.return_value = None
     mock_post.return_value = mock_response
-    
+
     client = APIClient("https://api.example.com")
     result = client.post("users", {"name": "Test"})
-    
+
     assert result == {"id": 1, "name": "Test"}
     mock_post.assert_called_once()
 
@@ -272,33 +272,33 @@ def test_api_client_post(mock_post):
 def test_example_homepage(page: Page):
     page.goto("https://example.com")
     expect(page).to_have_title("Example Domain")
-    
+
     heading = page.get_by_role("heading", name="Example Domain")
     expect(heading).to_be_visible()
 
 
 def test_example_navigation(page: Page):
     page.goto("https://example.com")
-    
+
     more_info_link = page.get_by_text("More information...")
     expect(more_info_link).to_be_visible()
-    
+
     more_info_link.click()
     expect(page).to_have_url("https://www.iana.org/domains/example")
 
 
 def test_form_interaction(page: Page):
     page.goto("https://example.com")
-    
+
     page.fill("input[name='q']", "test search")
     page.press("input[name='q']", "Enter")
-    
+
     page.wait_for_load_state("networkidle")
 
 
 def test_element_visibility(page: Page):
     page.goto("https://example.com")
-    
+
     paragraph = page.locator("p")
     expect(paragraph.first).to_be_visible()
     expect(paragraph.first).to_contain_text("This domain is for use in illustrative examples")
@@ -306,10 +306,10 @@ def test_element_visibility(page: Page):
 
 def test_multiple_elements(page: Page):
     page.goto("https://example.com")
-    
+
     paragraphs = page.locator("p")
     count = paragraphs.count()
     assert count > 0
-    
+
     for i in range(count):
         expect(paragraphs.nth(i)).to_be_visible()

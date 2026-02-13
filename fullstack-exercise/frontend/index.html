@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fullstack Exercise</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { margin-bottom: 1rem; }
+    .error { color: #c00; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+    form { margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    input, button { padding: 0.5rem; }
+    button { cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Список элементов</h1>
+  <p>API: <span id="api-base">/api</span></p>
+  <div id="error" class="error"></div>
+  <ul id="list"></ul>
+  <form id="form">
+    <input type="text" id="title" placeholder="Название" required>
+    <input type="text" id="description" placeholder="Описание">
+    <button type="submit">Добавить</button>
+  </form>
+
+  <script>
+    const API_BASE = (window.location.origin && !window.location.origin.startsWith('file'))
+      ? window.location.origin + '/api'
+      : 'http://localhost:8000/api';
+    document.getElementById('api-base').textContent = API_BASE;
+
+    function showError(msg) {
+      document.getElementById('error').textContent = msg;
+    }
+    function clearError() {
+      document.getElementById('error').textContent = '';
+    }
+
+    async function loadItems() {
+      clearError();
+      try {
+        const r = await fetch(API_BASE + '/items');
+        if (!r.ok) throw new Error(r.statusText);
+        const data = await r.json();
+        const ul = document.getElementById('list');
+        ul.innerHTML = (data.items || []).map(it => 
+          `<li><strong>${it.title}</strong> ${it.description || ''}</li>`
+        ).join('');
+      } catch (e) {
+        showError('Ошибка загрузки: ' + e.message);
+      }
+    }
+
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearError();
+      const title = document.getElementById('title').value.trim();
+      const description = document.getElementById('description').value.trim();
+      try {
+        const r = await fetch(API_BASE + '/items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, description: description || null })
+        });
+        if (!r.ok) throw new Error(r.statusText);
+        document.getElementById('title').value = '';
+        document.getElementById('description').value = '';
+        loadItems();
+      } catch (err) {
+        showError('Ошибка: ' + err.message);
+      }
+    });
+
+    loadItems();
+  </script>
+</body>
+</html>
