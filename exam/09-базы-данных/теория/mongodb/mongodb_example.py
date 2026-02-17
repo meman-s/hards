@@ -1,8 +1,7 @@
 from pymongo import MongoClient
-from pymongo.errors import DuplicateKeyError
 from datetime import datetime, timedelta
 from bson import ObjectId
-from bson.errors import InvalidId
+import os
 
 
 client = MongoClient('mongodb://localhost:27017/')
