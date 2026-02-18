@@ -75,3 +75,28 @@ def find_duplicates(items):
 
 def process_large_dataset(data):
     return list(set(data))
+
+
+class Database:
+    def __init__(self):
+        self.data = {}
+
+    def insert(self, key, value):
+        self.data[key] = value
+
+    def get(self, key):
+        return self.data.get(key)
+
+    def delete(self, key):
+        if key in self.data:
+            del self.data[key]
+            return True
+        return False
+
+
+def process_data(db, items):
+    result = []
+    for item in items:
+        db.insert(item, item * 2)
+        result.append(db.get(item))
+    return result
