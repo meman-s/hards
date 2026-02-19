@@ -149,6 +149,7 @@ db = client["exam_db"]
 
 def mongo_exersice():
     orders = db["orders"]
+    orders.find()
 
     pipeline = [
         {"$lookup": {
