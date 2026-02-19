@@ -1,0 +1,36 @@
+version: '3.8'
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user -d mydb" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - backend
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+networks:
+  frontend:
+  backend:
+
+
+volumes:
+  postgres_data:

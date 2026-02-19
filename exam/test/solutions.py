@@ -1,6 +1,7 @@
 import random
 import time
 from functools import wraps
+from tkinter import N
 from pymongo.synchronous import database
 import pytest
 from collections import deque
@@ -267,4 +268,93 @@ def merge_sorted_lists(lists):
 
 
 lists = [random.randint(1, 100) for _ in range(10000)]
-print(count_pairs_with_sum(lists, target=50))
+# print(count_pairs_with_sum(lists, target=50))
+
+
+def is_bipartite(graph: list[list[int]]):
+    n = len(graph)
+    color = [-1] * n
+
+    for start in range(n):
+        if color[start] != -1:
+            continue
+
+        q: deque[int] = deque([start])
+        color[start] = 0
+
+        while q:
+            v = q.popleft()
+            for u in graph[v]:
+                if color[u] == -1:
+                    color[u] = 1 - color[v]
+                elif color[u] == color[v]:
+                    return False
+    return True
+
+
+def count_components_undirected(graph: list[list[int]]):
+    n = len(graph)
+    visited = [False] * n
+    count = 0
+
+    def dfs(v: int):
+        visited[v] = True
+        for u in graph[v]:
+            if not visited[u]:
+                dfs(u)
+
+    for start in range(n):
+        if not visited(start):
+            count += 1
+            dfs(count)
+
+    return count
+
+
+def has_cycle_directed(graph: list[list[int]]):
+    n = len(graph)
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = [WHITE] * n
+
+    def dfs(v: int):
+        color[v] = GRAY
+        for u in graph[v]:
+            if color[u] == GRAY:
+                return True
+            if color[u] == WHITE and dfs(u):
+                return True
+        color[v] = BLACK
+        return False
+
+    for start in range(n):
+        if color[start] == WHITE and dfs(start):
+            return True
+
+    return False
+
+
+def bfs_directed_distances(graph: list[list[int]], start: int):
+    n = len(graph)
+    dist = [-1] * n
+    dist[start] = 0
+    q: deque[int] = deque([start])
+
+    while q:
+        v = q.popleft()
+        for u in graph[v]:
+            if dist[u] == -1:
+                dist[u] = dist[v] + 1
+                q.append(u)
+
+    return dist
+
+
+def sources_and_sinks(graph: list[list[int]]):
+    n = len(graph)
+    in_deg = [0] * n
+    for v in range(n):
+        for u in graph[v]:
+            in_deg[u] += 1
+    sources = [v for v in range(n) if in_deg[v] == 0]
+    sinks = [v for v in range(n) if len(graph[v]) == 0]
+    return (sources, sinks)
